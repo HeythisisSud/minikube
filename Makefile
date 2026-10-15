@@ -24,7 +24,7 @@ KIC_VERSION ?= $(shell grep -E "Version =" pkg/drivers/kic/types.go | cut -d \" 
 HUGO_VERSION ?= $(shell grep -E "HUGO_VERSION = \"" netlify.toml | cut -d \" -f2)
 
 # Default to .0 for higher cache hit rates, as build increments typically don't require new ISO versions
-ISO_VERSION ?= v1.39.0-1791620168-23829
+ISO_VERSION ?= v1.39.0-1791735336-23853
 
 # Dashes are valid in semver, but not Linux packaging. Use ~ to delimit alpha/beta
 DEB_VERSION ?= $(subst -,~,$(RAW_VERSION))
@@ -493,20 +493,29 @@ out/linters/golangci-lint-$(GOLINT_VERSION):
 	os=$$(go env GOOS); \
 	arch=$$(go env GOARCH); \
 	name="golangci-lint-$${version}-$${os}-$${arch}"; \
-	archive="out/linters/$${name}.tar.gz"; \
 	checksums="out/linters/golangci-lint-$${version}-checksums.txt"; \
-	curl -sfL -o "$${archive}" "https://github.com/golangci/golangci-lint/releases/download/$(GOLINT_VERSION)/$${name}.tar.gz"; \
+	if [ "$${os}" = "windows" ]; then \
+		ext="zip"; \
+		suffix=".exe"; \
+	else \
+		ext="tar.gz"; \
+		suffix=""; \
+	fi; \
+	archive="out/linters/$${name}.$${ext}"; \
 	curl -sfL -o "$${checksums}" "https://github.com/golangci/golangci-lint/releases/download/$(GOLINT_VERSION)/golangci-lint-$${version}-checksums.txt"; \
-	want=$$(awk -v file="$${name}.tar.gz" '$$2 == file { print $$1; exit }' "$${checksums}"); \
-	test -n "$${want}"; \
+	curl -sfL -o "$${archive}" "https://github.com/golangci/golangci-lint/releases/download/$(GOLINT_VERSION)/$${name}.$${ext}"; \
+	want=$$(awk -v file="$${name}.$${ext}" '$$2 == file { print $$1; exit }' "$${checksums}"); \
 	got=$$(openssl sha256 "$${archive}" | awk '{print $$2}'); \
-	test "$${want}" = "$${got}"; \
+	test -n "$${want}" && test "$${want}" = "$${got}"; \
 	tmpdir=$$(mktemp -d); \
-	tar -xzf "$${archive}" -C "$${tmpdir}"; \
-	mv "$${tmpdir}/$${name}/golangci-lint" "$@"; \
-	chmod +x "$@"; \
+	if [ "$${os}" = "windows" ]; then \
+		unzip -q "$${archive}" -d "$${tmpdir}"; \
+	else \
+		tar -xzf "$${archive}" -C "$${tmpdir}"; \
+		chmod +x "$${tmpdir}/$${name}/golangci-lint"; \
+	fi; \
+	mv "$${tmpdir}/$${name}/golangci-lint$${suffix}" "$@"; \
 	rm -rf "$${tmpdir}" "$${archive}" "$${checksums}"
-
 # this one is meant for local use
 .PHONY: lint
 ifeq ($(MINIKUBE_BUILD_IN_DOCKER),y)
